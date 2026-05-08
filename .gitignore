@@ -9,3 +9,6 @@ DerivedData/
 *.app
 *.dmg
 dist/
+
+.claude
+.idea
