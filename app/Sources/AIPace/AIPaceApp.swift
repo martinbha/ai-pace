@@ -19,9 +19,11 @@ struct AIPaceApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItemController: StatusItemController?
     private var optionsWindowController: OptionsWindowController?
+    private var keyboardMonitor: Any?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        registerKeyboardShortcuts()
     }
 
     func configureIfNeeded(store: UsageStore) {
@@ -46,5 +48,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             optionsWindowController = OptionsWindowController(store: store)
         }
         optionsWindowController?.show()
+    }
+
+    private func registerKeyboardShortcuts() {
+        keyboardMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            self?.handleKeyEvent(event) ?? event
+        }
+    }
+
+    private func handleKeyEvent(_ event: NSEvent) -> NSEvent? {
+        let savedKeyCode = UserDefaults.standard.integer(forKey: "floatingWindowShortcutKeyCode")
+        let keyCode: UInt16 = savedKeyCode != 0 ? UInt16(savedKeyCode) : 19
+        let savedModifiers = UserDefaults.standard.integer(forKey: "floatingWindowShortcutModifiers")
+        let modifiers = NSEvent.ModifierFlags(rawValue: savedModifiers != 0 ? UInt(savedModifiers) : (NSEvent.ModifierFlags.command.rawValue | NSEvent.ModifierFlags.shift.rawValue))
+
+        if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == modifiers, event.keyCode == keyCode {
+            statusItemController?.toggleFloatingMode()
+            return nil
+        }
+
+        return event
+    }
+
+    @MainActor
+    deinit {
+        if let monitor = keyboardMonitor {
+            NSEvent.removeMonitor(monitor)
+        }
     }
 }

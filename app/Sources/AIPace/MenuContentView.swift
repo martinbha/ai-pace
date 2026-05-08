@@ -395,6 +395,9 @@ struct SettingsView: View {
     @AppStorage("appLanguage") private var langID = AppLanguage.english.rawValue
     @AppStorage("menuBarDisplayMode") private var menuBarDisplayModeID = MenuBarDisplayMode.usage.rawValue
     @AppStorage("popoverDisplayMode") private var popoverDisplayModeID = PopoverDisplayMode.usage.rawValue
+    @AppStorage("windowFloatingMode") private var windowFloatingMode = false
+    @AppStorage("floatingWindowShortcutModifiers") private var shortcutModifiers = 0x110000
+    @AppStorage("floatingWindowShortcutKeyCode") private var shortcutKeyCode = 19
 
     private var lang: AppLanguage { AppLanguage(rawValue: langID) ?? .english }
     private var loc: Loc { Loc(lang: lang) }
@@ -486,6 +489,34 @@ struct SettingsView: View {
                     .fixedSize()
                     .frame(width: 180, alignment: .trailing)
                 }
+
+                Divider()
+
+                settingRow("Float window") {
+                    Toggle("", isOn: $windowFloatingMode)
+                        .labelsHidden()
+                }
+
+                Text("Window stays on top and can be moved freely")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.leading, 136)
+
+                Divider()
+
+                settingRow("Float shortcut") {
+                    KeyboardShortcutRecorder(
+                        modifiers: $shortcutModifiers,
+                        keyCode: $shortcutKeyCode
+                    )
+                }
+
+                Text("Click to record a new keyboard shortcut")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.tertiary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.leading, 136)
             }
 
             settingsCard(title: loc.agents) {
@@ -821,6 +852,134 @@ private struct AgentStatusRow: View {
             return .orange
         case .error:
             return .red
+        }
+    }
+}
+
+private struct KeyboardShortcutRecorder: View {
+    @Binding var modifiers: Int
+    @Binding var keyCode: Int
+    @State private var isRecording = false
+    @State private var recordingMonitor: Any?
+
+    var body: some View {
+        Button(action: startRecording) {
+            if isRecording {
+                Text("Press a key...")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.orange)
+            } else {
+                Text(displayString)
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle(.primary)
+            }
+        }
+        .buttonStyle(.bordered)
+        .frame(width: 180, alignment: .trailing)
+        .onDisappear {
+            stopRecording()
+        }
+    }
+
+    private var displayString: String {
+        let mod = NSEvent.ModifierFlags(rawValue: UInt(modifiers))
+        var parts: [String] = []
+
+        if mod.contains(.command) { parts.append("⌘") }
+        if mod.contains(.shift) { parts.append("⇧") }
+        if mod.contains(.option) { parts.append("⌥") }
+        if mod.contains(.control) { parts.append("⌃") }
+
+        let keyName = KeyCodeNames.name(for: UInt16(keyCode)) ?? "Key \(keyCode)"
+        parts.append(keyName)
+
+        return parts.joined(separator: " ")
+    }
+
+    private func startRecording() {
+        isRecording = true
+        recordingMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [self] event in
+            self.recordKeyEvent(event)
+            return nil
+        }
+    }
+
+    private func recordKeyEvent(_ event: NSEvent) {
+        let modifiers = event.modifierFlags.intersection(.deviceIndependentFlagsMask).rawValue
+        self.modifiers = Int(modifiers)
+        self.keyCode = Int(event.keyCode)
+        stopRecording()
+    }
+
+    private func stopRecording() {
+        isRecording = false
+        if let monitor = recordingMonitor {
+            NSEvent.removeMonitor(monitor)
+            recordingMonitor = nil
+        }
+    }
+}
+
+private enum KeyCodeNames {
+    static func name(for keyCode: UInt16) -> String? {
+        switch keyCode {
+        case 0: return "A"
+        case 1: return "S"
+        case 2: return "D"
+        case 3: return "F"
+        case 4: return "H"
+        case 5: return "G"
+        case 6: return "Z"
+        case 7: return "X"
+        case 8: return "C"
+        case 9: return "V"
+        case 11: return "B"
+        case 12: return "Q"
+        case 13: return "W"
+        case 14: return "E"
+        case 15: return "R"
+        case 16: return "Y"
+        case 17: return "T"
+        case 18: return "1"
+        case 19: return "2"
+        case 20: return "3"
+        case 21: return "4"
+        case 22: return "6"
+        case 23: return "5"
+        case 24: return "="
+        case 25: return "9"
+        case 26: return "7"
+        case 27: return "-"
+        case 28: return "8"
+        case 29: return "0"
+        case 30: return "]"
+        case 31: return "O"
+        case 32: return "U"
+        case 33: return "["
+        case 34: return "I"
+        case 35: return "P"
+        case 36: return "Return"
+        case 37: return "L"
+        case 38: return "J"
+        case 39: return "'"
+        case 40: return "K"
+        case 41: return ";"
+        case 42: return "\\"
+        case 43: return ","
+        case 44: return "/"
+        case 45: return "N"
+        case 46: return "M"
+        case 47: return "."
+        case 48: return "Tab"
+        case 49: return "Space"
+        case 50: return "`"
+        case 51: return "Delete"
+        case 53: return "Esc"
+        case 123: return "←"
+        case 124: return "→"
+        case 125: return "↓"
+        case 126: return "↑"
+        default: return nil
         }
     }
 }

@@ -28,6 +28,13 @@ final class StatusItemController: NSObject, NSMenuDelegate, NSPopoverDelegate {
         self?.rebuildStatusItem(reason: reason)
     }
 
+    private var floatingPanel: NSPanel?
+    private var floatingPanelHostingController: NSHostingController<MenuContentView>?
+
+    private var isFloatingModeEnabled: Bool {
+        UserDefaults.standard.bool(forKey: "windowFloatingMode")
+    }
+
     init(store: UsageStore, openSettings: @escaping @MainActor () -> Void) {
         self.store = store
         self.openSettings = openSettings
@@ -42,6 +49,17 @@ final class StatusItemController: NSObject, NSMenuDelegate, NSPopoverDelegate {
         wakeFollowupTask?.cancel()
         lifecycleObservers.forEach { observer in
             observer.center.removeObserver(observer.token)
+        }
+    }
+
+    func toggleFloatingMode() {
+        let newValue = !isFloatingModeEnabled
+        UserDefaults.standard.set(newValue, forKey: "windowFloatingMode")
+        if newValue {
+            closePopover()
+            showFloatingPanel()
+        } else {
+            closeFloatingPanel()
         }
     }
 
@@ -255,23 +273,29 @@ final class StatusItemController: NSObject, NSMenuDelegate, NSPopoverDelegate {
     }
 
     private func updatePopoverLayout() {
-        guard let hostingController = popoverHostingController else {
-            return
-        }
-
         let size = popoverSize()
-        guard popover.contentSize != size || hostingController.preferredContentSize != size else {
-            return
+
+        if let hostingController = popoverHostingController {
+            guard popover.contentSize != size || hostingController.preferredContentSize != size else {
+                return
+            }
+            popover.contentSize = size
+            hostingController.preferredContentSize = size
+            hostingController.view.setFrameSize(size)
+            hostingController.rootView = MenuContentView(
+                store: store,
+                openSettings: openSettings,
+                popoverHeight: size.height
+            )
         }
 
-        popover.contentSize = size
-        hostingController.preferredContentSize = size
-        hostingController.view.setFrameSize(size)
-        hostingController.rootView = MenuContentView(
-            store: store,
-            openSettings: openSettings,
-            popoverHeight: size.height
-        )
+        if let hostingController = floatingPanelHostingController {
+            hostingController.rootView = MenuContentView(
+                store: store,
+                openSettings: openSettings,
+                popoverHeight: size.height
+            )
+        }
     }
 
     private func popoverSize() -> NSSize {
@@ -302,7 +326,11 @@ final class StatusItemController: NSObject, NSMenuDelegate, NSPopoverDelegate {
         case .rightMouseUp:
             showContextMenu()
         default:
-            togglePopover()
+            if isFloatingModeEnabled {
+                toggleFloatingPanelVisibility()
+            } else {
+                togglePopover()
+            }
         }
     }
 
@@ -322,6 +350,73 @@ final class StatusItemController: NSObject, NSMenuDelegate, NSPopoverDelegate {
         Task {
             await store.refreshNotificationAuthorizationState()
         }
+    }
+
+    private func toggleFloatingPanelVisibility() {
+        if floatingPanel?.isVisible == true {
+            closeFloatingPanel()
+        } else {
+            showFloatingPanel()
+        }
+    }
+
+    private func showFloatingPanel() {
+        if floatingPanel == nil {
+            floatingPanel = makeFloatingPanel()
+            positionFloatingPanelNearStatusItem()
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        floatingPanel?.orderFront(nil)
+        Task {
+            await store.refreshNotificationAuthorizationState()
+        }
+    }
+
+    private func closeFloatingPanel() {
+        floatingPanel?.orderOut(nil)
+    }
+
+    private func makeFloatingPanel() -> NSPanel {
+        let size = popoverSize()
+        let panel = NSPanel(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        panel.title = "AIPace"
+        panel.level = .floating
+        panel.isMovableByWindowBackground = true
+        panel.isReleasedWhenClosed = false
+        panel.hidesOnDeactivate = false
+        panel.collectionBehavior = [.canJoinAllSpaces]
+
+        let hostingController = NSHostingController(
+            rootView: MenuContentView(store: store, openSettings: openSettings, popoverHeight: size.height)
+        )
+        hostingController.sizingOptions = []
+        panel.contentViewController = hostingController
+        floatingPanelHostingController = hostingController
+
+        return panel
+    }
+
+    private func positionFloatingPanelNearStatusItem() {
+        guard let panel = floatingPanel,
+              let button = statusItem?.button,
+              let buttonWindow = button.window else {
+            floatingPanel?.center()
+            return
+        }
+
+        let buttonFrameInWindow = button.convert(button.bounds, to: nil)
+        let buttonFrameOnScreen = buttonWindow.convertToScreen(buttonFrameInWindow)
+        let panelSize = panel.frame.size
+        let origin = NSPoint(
+            x: buttonFrameOnScreen.minX,
+            y: buttonFrameOnScreen.minY - panelSize.height - 8
+        )
+        panel.setFrameOrigin(origin)
     }
 
     private func showContextMenu() {
