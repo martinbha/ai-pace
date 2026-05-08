@@ -7,10 +7,10 @@ struct StatusItemControllerTests {
     @Test
     @MainActor
     func popoverHeightBucketsMatchVisibleAgentCounts() {
-        #expect(StatusItemController.popoverHeight(forVisibleSnapshotCount: 0) == 220)
-        #expect(StatusItemController.popoverHeight(forVisibleSnapshotCount: 1) == 250)
-        #expect(StatusItemController.popoverHeight(forVisibleSnapshotCount: 2) == 380)
-        #expect(StatusItemController.popoverHeight(forVisibleSnapshotCount: 5) == 380)
+        #expect(StatusItemController.popoverHeight(forVisibleSnapshotCount: 0) == 186)
+        #expect(StatusItemController.popoverHeight(forVisibleSnapshotCount: 1) == 216)
+        #expect(StatusItemController.popoverHeight(forVisibleSnapshotCount: 2) == 346)
+        #expect(StatusItemController.popoverHeight(forVisibleSnapshotCount: 5) == 346)
     }
 
     @Test
