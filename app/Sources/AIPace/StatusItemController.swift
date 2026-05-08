@@ -309,11 +309,11 @@ final class StatusItemController: NSObject, NSMenuDelegate, NSPopoverDelegate {
     static func popoverHeight(forVisibleSnapshotCount count: Int) -> CGFloat {
         switch count {
         case 0:
-            return 220
+            return 186
         case 1:
-            return 250
+            return 216
         default:
-            return 380
+            return 346
         }
     }
 

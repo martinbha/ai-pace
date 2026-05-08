@@ -28,17 +28,6 @@ struct MenuContentView: View {
         let visibleSnapshots = store.visibleSnapshots
 
         VStack(spacing: 0) {
-            // Header
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                AppLogoView(size: 18)
-                Text("AIPace")
-                    .font(.system(size: 16, weight: .semibold))
-                Spacer()
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 18)
-            .padding(.bottom, 14)
-
             // Provider cards
             VStack(spacing: 8) {
                 if visibleSnapshots.isEmpty {
@@ -55,6 +44,7 @@ struct MenuContentView: View {
                 }
             }
             .padding(.horizontal, 20)
+            .padding(.top, 16)
 
             // Footer
             HStack {
