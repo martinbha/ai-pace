@@ -56,6 +56,86 @@ struct ClaudeCredentialLoaderTests {
     }
 
     @Test
+    func resolveCredentialsFallsBackToClaudeDesktopTokenCache() throws {
+        let homeDirectory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: homeDirectory) }
+
+        let desktopConfigURL = homeDirectory.appendingPathComponent("desktop-config.json")
+        try Data(
+            """
+            {
+              "oauth:tokenCache": "\(Self.encryptedDesktopTokenCache)"
+            }
+            """.utf8
+        ).write(to: desktopConfigURL)
+
+        let loader = ClaudeCredentialLoader(
+            homeDirectory: homeDirectory,
+            environment: [:],
+            desktopConfigURL: desktopConfigURL,
+            keychainLoadOverride: .success(nil),
+            desktopSafeStoragePasswordOverride: .success("desktop-password")
+        )
+
+        let resolution = loader.resolveCredentials()
+
+        #expect(resolution.credentials?.source == .desktop)
+        #expect(resolution.credentials?.oauth.accessToken == "desktop-token")
+        #expect(resolution.credentials?.oauth.refreshToken == "desktop-refresh")
+        #expect(resolution.credentials?.oauth.expiresAt == 123456)
+        #expect(resolution.credentials?.oauth.subscriptionType == "claude_max")
+    }
+
+    @Test
+    func saveCredentialsUpdatesClaudeDesktopTokenCache() throws {
+        let homeDirectory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: homeDirectory) }
+
+        let desktopConfigURL = homeDirectory.appendingPathComponent("desktop-config.json")
+        try Data(
+            """
+            {
+              "oauth:tokenCache": "\(Self.encryptedDesktopTokenCache)",
+              "kept": true
+            }
+            """.utf8
+        ).write(to: desktopConfigURL)
+
+        let loader = ClaudeCredentialLoader(
+            homeDirectory: homeDirectory,
+            environment: [:],
+            desktopConfigURL: desktopConfigURL,
+            keychainLoadOverride: .success(nil),
+            desktopSafeStoragePasswordOverride: .success("desktop-password")
+        )
+        var result = try #require(loader.resolveCredentials().credentials)
+        result.oauth.accessToken = "updated-desktop-token"
+        result.oauth.refreshToken = "updated-desktop-refresh"
+        result.oauth.expiresAt = 789
+        result.oauth.subscriptionType = "pro"
+
+        loader.saveCredentials(result)
+
+        let reloaded = ClaudeCredentialLoader(
+            homeDirectory: homeDirectory,
+            environment: [:],
+            desktopConfigURL: desktopConfigURL,
+            keychainLoadOverride: .success(nil),
+            desktopSafeStoragePasswordOverride: .success("desktop-password")
+        )
+        let updated = reloaded.resolveCredentials().credentials
+        let data = try Data(contentsOf: desktopConfigURL)
+        let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+
+        #expect(object["kept"] as? Bool == true)
+        #expect(updated?.source == .desktop)
+        #expect(updated?.oauth.accessToken == "updated-desktop-token")
+        #expect(updated?.oauth.refreshToken == "updated-desktop-refresh")
+        #expect(updated?.oauth.expiresAt == 789)
+        #expect(updated?.oauth.subscriptionType == "pro")
+    }
+
+    @Test
     func needsRefreshHonorsExpiryBuffer() {
         let loader = ClaudeCredentialLoader(
             homeDirectory: FileManager.default.homeDirectoryForCurrentUser,
@@ -129,4 +209,8 @@ struct ClaudeCredentialLoaderTests {
             Issue.record("Expected missing keychain item to map to no credentials")
         }
     }
+
+    private static let encryptedDesktopTokenCache = """
+    djEw1t3ciMhY5p0gKmEKqWNBS6J3Hdd/KMu06KS9MwEV6By5ydfBpzhwpL9gto1YhCiyEb89IkMwvbSfMz4ikBYCcCukFAZ9DNsBHZVUz0rAZ2bGYph25JnT/bfPdoArWbiDgToPxOjhFDpXmzdHCN0U6/Y8U2ZxTs7C1hHq5TcHXT/iLlXCjGtB3OcEFoJHugbdcADCjB4WitC0C01NNhKppt4mZ/JE9/DlP6QQoZ3j/AEUnYVMdzgwAecRmRyN2yeMhpNa1Tw3NlGMpoFQsBaC8dpxDAlAcO10byHqEb2/yCw=
+    """
 }

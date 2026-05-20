@@ -51,7 +51,7 @@ AIPace is a lightweight menu bar app that shows your current `5h` and `weekly` u
 
 - macOS 14 or later
 - Xcode with Swift 6.2 support, or a Swift 6.2 toolchain
-- `claude` installed and logged in (for Claude usage)
+- `claude` installed and logged in, or Claude Desktop signed in (for Claude usage)
 - `codex` installed and logged in (for Codex usage)
 
 ## How It Works
@@ -63,6 +63,7 @@ AIPace finds your Claude credentials by checking these locations in order:
 1. `~/.claude/.credentials.json`
 2. macOS Keychain service `Claude Code-credentials`
 3. `CLAUDE_CODE_OAUTH_TOKEN` environment variable
+4. Claude Desktop token cache at `~/Library/Application Support/Claude/config.json`, decrypted with macOS Keychain service `Claude Safe Storage`
 
 Then it calls:
 
@@ -71,7 +72,7 @@ Then it calls:
 
 It also reads `~/.claude.json -> oauthAccount` for display info only.
 
-**Note:** If macOS asks for Keychain access, that is expected. The app is reading your Claude credentials from Keychain.
+**Note:** If macOS asks for Keychain access, that is expected. The app is reading Claude OAuth credentials from Keychain-backed local auth state.
 
 ### Codex
 
@@ -81,7 +82,7 @@ AIPace uses `codex app-server` with your existing Codex login. It launches from 
 
 - **No telemetry**: nothing is tracked
 - **No backend**: there is no proxy or app server
-- **Local only**: credentials come from your existing CLI auth state
+- **Local only**: credentials come from your existing CLI or Claude Desktop auth state
 - **Direct connections**: requests go from your Mac to provider endpoints
 - **No syncing**: tokens stay on your machine
 

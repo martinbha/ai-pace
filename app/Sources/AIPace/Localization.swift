@@ -446,19 +446,19 @@ struct Loc {
     var providersDesc: String {
         switch lang {
         case .english:
-            return "Codex uses codex app-server. Claude reads credentials from file, Keychain, then CLAUDE_CODE_OAUTH_TOKEN."
+            return "Codex uses codex app-server. Claude reads credentials from file, Keychain, CLAUDE_CODE_OAUTH_TOKEN, then Claude Desktop."
         case .spanish:
-            return "Codex usa codex app-server. Claude lee credenciales desde archivo, Llavero y luego CLAUDE_CODE_OAUTH_TOKEN."
+            return "Codex usa codex app-server. Claude lee credenciales desde archivo, Llavero, CLAUDE_CODE_OAUTH_TOKEN y luego Claude Desktop."
         case .french:
-            return "Codex utilise codex app-server. Claude lit les identifiants depuis le fichier, le Trousseau, puis CLAUDE_CODE_OAUTH_TOKEN."
+            return "Codex utilise codex app-server. Claude lit les identifiants depuis le fichier, le Trousseau, CLAUDE_CODE_OAUTH_TOKEN, puis Claude Desktop."
         case .german:
-            return "Codex verwendet codex app-server. Claude liest Anmeldedaten aus Datei, Schlüsselbund und danach CLAUDE_CODE_OAUTH_TOKEN."
+            return "Codex verwendet codex app-server. Claude liest Anmeldedaten aus Datei, Schlüsselbund, CLAUDE_CODE_OAUTH_TOKEN und danach Claude Desktop."
         case .japanese:
-            return "Codex は codex app-server を使います。Claude はファイル、キーチェーン、CLAUDE_CODE_OAUTH_TOKEN の順で認証情報を読み込みます。"
+            return "Codex は codex app-server を使います。Claude はファイル、キーチェーン、CLAUDE_CODE_OAUTH_TOKEN、Claude Desktop の順で認証情報を読み込みます。"
         case .korean:
-            return "Codex는 codex app-server를 사용합니다. Claude는 파일, 키체인, CLAUDE_CODE_OAUTH_TOKEN 순으로 자격 증명을 읽습니다."
+            return "Codex는 codex app-server를 사용합니다. Claude는 파일, 키체인, CLAUDE_CODE_OAUTH_TOKEN, Claude Desktop 순으로 자격 증명을 읽습니다."
         case .chineseSimplified:
-            return "Codex 使用 codex app-server。Claude 会依次从文件、钥匙串和 CLAUDE_CODE_OAUTH_TOKEN 读取凭证。"
+            return "Codex 使用 codex app-server。Claude 会依次从文件、钥匙串、CLAUDE_CODE_OAUTH_TOKEN 和 Claude Desktop 读取凭证。"
         }
     }
 
