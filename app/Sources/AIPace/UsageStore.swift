@@ -8,6 +8,11 @@ protocol ProviderSnapshotFetching: Sendable {
 extension ClaudeProbe: ProviderSnapshotFetching {}
 extension CodexProbe: ProviderSnapshotFetching {}
 
+enum RefreshTrigger {
+    case automatic
+    case manual
+}
+
 private struct SnapshotMergeResult {
     let snapshot: ProviderSnapshot
     let preservedPrevious: Bool
@@ -83,13 +88,19 @@ final class UsageStore: ObservableObject {
         !visibleSnapshots.isEmpty
     }
 
-    func refresh() async {
+    func refresh(trigger: RefreshTrigger = .automatic) async {
         guard !isRefreshing else { return }
         isRefreshing = true
         defer { isRefreshing = false }
 
         let previousClaude = claude
         let previousCodex = codex
+        let shouldForceCodexCredentialRefresh = trigger == .manual
+
+        if shouldForceCodexCredentialRefresh {
+            preservedFailureCounts[.codex] = 0
+            codex = .loading(.codex)
+        }
 
         async let claudeSnapshot = claudeProbe.fetch()
         async let codexSnapshot = codexProbe.fetch()
@@ -98,7 +109,11 @@ final class UsageStore: ObservableObject {
         let newCodex = await codexSnapshot
 
         let resolvedClaude = mergedSnapshot(previous: previousClaude, current: newClaude)
-        let resolvedCodex = mergedSnapshot(previous: previousCodex, current: newCodex)
+        let resolvedCodex = mergedSnapshot(
+            previous: previousCodex,
+            current: newCodex,
+            shouldPreservePrevious: !shouldForceCodexCredentialRefresh
+        )
 
         claude = resolvedClaude.snapshot
         codex = resolvedCodex.snapshot
@@ -274,8 +289,13 @@ final class UsageStore: ObservableObject {
         }
     }
 
-    private func mergedSnapshot(previous: ProviderSnapshot, current: ProviderSnapshot) -> SnapshotMergeResult {
-        guard shouldPreservePreviousSnapshot(
+    private func mergedSnapshot(
+        previous: ProviderSnapshot,
+        current: ProviderSnapshot,
+        shouldPreservePrevious: Bool = true
+    ) -> SnapshotMergeResult {
+        guard shouldPreservePrevious,
+              shouldPreservePreviousSnapshot(
             previous: previous,
             current: current,
             preservedFailureCount: preservedFailureCounts[current.provider, default: 0]

@@ -74,7 +74,7 @@ struct MenuContentView: View {
                     }
 
                     footerButton(icon: "arrow.clockwise", dimmed: store.isRefreshing) {
-                        Task { await store.refresh() }
+                        Task { await store.refresh(trigger: .manual) }
                     }
                     .disabled(store.isRefreshing)
                 }
