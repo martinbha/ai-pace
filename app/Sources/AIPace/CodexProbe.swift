@@ -1,6 +1,8 @@
 import Foundation
 
 struct CodexProbe: Sendable {
+    private static let responseTimeout: Duration = .seconds(15)
+
     func fetch() async -> ProviderSnapshot {
         do {
             let limits = try await fetchRateLimits()
@@ -38,6 +40,7 @@ struct CodexProbe: Sendable {
         let process = Process()
         let stdin = Pipe()
         let stdout = Pipe()
+        let processTerminator = ProcessTerminator(process: process)
 
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = ["-s", "read-only", "-a", "untrusted", "app-server"]
@@ -49,10 +52,10 @@ struct CodexProbe: Sendable {
 
         try process.run()
         defer {
-            if process.isRunning {
-                process.terminate()
-            }
+            processTerminator.terminate()
         }
+
+        let lines = stdout.fileHandleForReading.bytes.lines
 
         try writeJSONLine([
             "jsonrpc": "2.0",
@@ -68,7 +71,9 @@ struct CodexProbe: Sendable {
 
         _ = try await readResponse(
             withID: 1,
-            from: stdout.fileHandleForReading.bytes.lines
+            from: lines,
+            timeout: Self.responseTimeout,
+            onTimeout: processTerminator.terminate
         )
 
         try writeJSONLine([
@@ -86,7 +91,9 @@ struct CodexProbe: Sendable {
 
         let payload = try await readResponse(
             withID: 2,
-            from: stdout.fileHandleForReading.bytes.lines
+            from: lines,
+            timeout: Self.responseTimeout,
+            onTimeout: processTerminator.terminate
         )
         guard
             let result = payload["result"] as? [String: Any],
@@ -129,6 +136,25 @@ struct CodexProbe: Sendable {
     }
 }
 
+private final class ProcessTerminator: @unchecked Sendable {
+    private let process: Process
+    private let lock = NSLock()
+
+    init(process: Process) {
+        self.process = process
+    }
+
+    func terminate() {
+        lock.lock()
+        defer { lock.unlock() }
+
+        guard process.isRunning else {
+            return
+        }
+        process.terminate()
+    }
+}
+
 struct CodexRateLimits {
     let primary: CodexRateLimitWindow?
     let secondary: CodexRateLimitWindow?
@@ -146,11 +172,51 @@ func writeJSONLine(_ object: [String: Any], to handle: FileHandle) throws {
     handle.write(Data([0x0A]))
 }
 
-func readResponse<S: AsyncSequence>(
+func readResponse<S: AsyncSequence & Sendable>(
+    withID id: Int,
+    from lines: S,
+    timeout: Duration? = nil,
+    onTimeout: (@Sendable () -> Void)? = nil
+) async throws -> [String: Any] where S.Element == String {
+    guard let timeout else {
+        return try await readResponseWithoutTimeout(withID: id, from: lines)
+    }
+
+    return try await withThrowingTaskGroup(of: ReadResponsePayload.self) { group in
+        group.addTask {
+            ReadResponsePayload(try await readResponseWithoutTimeout(withID: id, from: lines))
+        }
+        group.addTask {
+            try await Task.sleep(for: timeout)
+            onTimeout?()
+            throw ProcessRunnerError.timedOut("Codex app-server timed out waiting for response id \(id).")
+        }
+
+        defer {
+            group.cancelAll()
+        }
+
+        guard let payload = try await group.next() else {
+            throw ProcessRunnerError.invalidResponse("Codex app-server closed before returning response id \(id).")
+        }
+        return payload.value
+    }
+}
+
+private struct ReadResponsePayload: @unchecked Sendable {
+    let value: [String: Any]
+
+    init(_ value: [String: Any]) {
+        self.value = value
+    }
+}
+
+private func readResponseWithoutTimeout<S: AsyncSequence & Sendable>(
     withID id: Int,
     from lines: S
 ) async throws -> [String: Any] where S.Element == String {
     for try await line in lines {
+        try Task.checkCancellation()
         guard !line.isEmpty, let data = line.data(using: .utf8) else {
             continue
         }

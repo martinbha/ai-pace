@@ -4,6 +4,7 @@ enum ProcessRunnerError: LocalizedError {
     case executableNotFound(String)
     case terminated(Int32, String)
     case invalidResponse(String)
+    case timedOut(String)
 
     var errorDescription: String? {
         switch self {
@@ -15,6 +16,8 @@ enum ProcessRunnerError: LocalizedError {
             }
             return output
         case .invalidResponse(let message):
+            return message
+        case .timedOut(let message):
             return message
         }
     }
