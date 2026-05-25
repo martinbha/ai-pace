@@ -95,10 +95,12 @@ final class UsageStore: ObservableObject {
 
         let previousClaude = claude
         let previousCodex = codex
-        let shouldForceCodexCredentialRefresh = trigger == .manual
+        let shouldForceCredentialRefresh = trigger == .manual
 
-        if shouldForceCodexCredentialRefresh {
+        if shouldForceCredentialRefresh {
+            preservedFailureCounts[.claude] = 0
             preservedFailureCounts[.codex] = 0
+            claude = .loading(.claude)
             codex = .loading(.codex)
         }
 
@@ -108,11 +110,15 @@ final class UsageStore: ObservableObject {
         let newClaude = await claudeSnapshot
         let newCodex = await codexSnapshot
 
-        let resolvedClaude = mergedSnapshot(previous: previousClaude, current: newClaude)
+        let resolvedClaude = mergedSnapshot(
+            previous: previousClaude,
+            current: newClaude,
+            shouldPreservePrevious: !shouldForceCredentialRefresh
+        )
         let resolvedCodex = mergedSnapshot(
             previous: previousCodex,
             current: newCodex,
-            shouldPreservePrevious: !shouldForceCodexCredentialRefresh
+            shouldPreservePrevious: !shouldForceCredentialRefresh
         )
 
         claude = resolvedClaude.snapshot

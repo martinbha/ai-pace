@@ -128,6 +128,34 @@ struct UsageStoreTests {
 
     @Test
     @MainActor
+    func manualRefreshDoesNotPreservePreviousClaudeRateLimitSnapshot() async {
+        let suiteName = UUID().uuidString
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let store = UsageStore(
+            claudeProbe: ProbeStub(queue: ProbeQueue([
+                makeSnapshot(.claude, fiveHourMessage: "Claude usage endpoint returned HTTP 429.", weeklyMessage: "Claude usage endpoint returned HTTP 429."),
+            ])),
+            codexProbe: ProbeStub(queue: ProbeQueue([
+                makeSnapshot(.codex, fiveHourUsed: 10, weeklyUsed: 20),
+            ])),
+            notificationManager: NotificationManagerSpy(),
+            userDefaults: defaults,
+            startRefreshLoop: false
+        )
+        store.claude = makeSnapshot(.claude, fiveHourUsed: 80, weeklyUsed: 90, detail: "Plan: old")
+
+        await store.refresh(trigger: .manual)
+
+        #expect(store.claude.fiveHour.usedPercentage == nil)
+        #expect(store.claude.weekly.usedPercentage == nil)
+        #expect(store.claude.fiveHour.message == "Claude usage endpoint returned HTTP 429.")
+        #expect(store.claude.detail == nil)
+    }
+
+    @Test
+    @MainActor
     func refreshPreservesFirstTransientClaudeAuthFailureOnly() async {
         let suiteName = UUID().uuidString
         let defaults = UserDefaults(suiteName: suiteName)!
