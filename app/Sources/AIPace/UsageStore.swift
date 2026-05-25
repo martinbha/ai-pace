@@ -1,17 +1,17 @@
 import Foundation
 import SwiftUI
 
-protocol ProviderSnapshotFetching: Sendable {
-    func fetch() async -> ProviderSnapshot
-}
-
-extension ClaudeProbe: ProviderSnapshotFetching {}
-extension CodexProbe: ProviderSnapshotFetching {}
-
 enum RefreshTrigger {
     case automatic
     case manual
 }
+
+protocol ProviderSnapshotFetching: Sendable {
+    func fetch(trigger: RefreshTrigger) async -> ProviderSnapshot
+}
+
+extension ClaudeProbe: ProviderSnapshotFetching {}
+extension CodexProbe: ProviderSnapshotFetching {}
 
 private struct SnapshotMergeResult {
     let snapshot: ProviderSnapshot
@@ -104,8 +104,8 @@ final class UsageStore: ObservableObject {
             codex = .loading(.codex)
         }
 
-        async let claudeSnapshot = claudeProbe.fetch()
-        async let codexSnapshot = codexProbe.fetch()
+        async let claudeSnapshot = claudeProbe.fetch(trigger: trigger)
+        async let codexSnapshot = codexProbe.fetch(trigger: trigger)
 
         let newClaude = await claudeSnapshot
         let newCodex = await codexSnapshot

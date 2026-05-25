@@ -80,7 +80,11 @@ struct ClaudeCredentialLoader {
         resolveCredentials().credentials
     }
 
-    func resolveCredentials() -> ClaudeCredentialResolution {
+    func resolveCredentials(refreshKeychainAccess: Bool = false) -> ClaudeCredentialResolution {
+        if refreshKeychainAccess {
+            return resolveCredentialsWithFreshKeychainAccess()
+        }
+
         if let credentials = loadFromFile() {
             return ClaudeCredentialResolution(credentials: credentials, issue: nil)
         }
@@ -110,6 +114,35 @@ struct ClaudeCredentialLoader {
         case .failure(let issue):
             return ClaudeCredentialResolution(credentials: nil, issue: issue)
         }
+    }
+
+    private func resolveCredentialsWithFreshKeychainAccess() -> ClaudeCredentialResolution {
+        let keychainResult = loadFromKeychain()
+        if case .success(let credentials) = keychainResult, let credentials {
+            return ClaudeCredentialResolution(credentials: credentials, issue: nil)
+        }
+
+        let desktopResult = loadFromClaudeDesktop()
+        if case .success(let credentials) = desktopResult, let credentials {
+            return ClaudeCredentialResolution(credentials: credentials, issue: nil)
+        }
+
+        if case .failure(let issue) = keychainResult {
+            return ClaudeCredentialResolution(credentials: nil, issue: issue)
+        }
+        if case .failure(let issue) = desktopResult {
+            return ClaudeCredentialResolution(credentials: nil, issue: issue)
+        }
+
+        if let credentials = loadFromFile() {
+            return ClaudeCredentialResolution(credentials: credentials, issue: nil)
+        }
+
+        if let credentials = loadFromEnvironment() {
+            return ClaudeCredentialResolution(credentials: credentials, issue: nil)
+        }
+
+        return ClaudeCredentialResolution(credentials: nil, issue: nil)
     }
 
     func needsRefresh(_ oauth: ClaudeOAuthCredentials) -> Bool {

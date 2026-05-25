@@ -39,6 +39,69 @@ struct ClaudeCredentialLoaderTests {
     }
 
     @Test
+    func resolveCredentialsWithFreshKeychainAccessPrefersKeychainOverFile() throws {
+        let homeDirectory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: homeDirectory) }
+
+        let credentialsURL = homeDirectory.appendingPathComponent(".claude/.credentials.json")
+        try FileManager.default.createDirectory(at: credentialsURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(
+            """
+            {
+              "claudeAiOauth": {
+                "accessToken": "file-token"
+              }
+            }
+            """.utf8
+        ).write(to: credentialsURL)
+
+        let keychainCredentials = ClaudeCredentialResult(
+            oauth: ClaudeOAuthCredentials(accessToken: "keychain-token", refreshToken: nil, expiresAt: nil, subscriptionType: nil),
+            source: .keychain,
+            fullData: [:]
+        )
+        let loader = ClaudeCredentialLoader(
+            homeDirectory: homeDirectory,
+            environment: [:],
+            keychainLoadOverride: .success(keychainCredentials)
+        )
+
+        let resolution = loader.resolveCredentials(refreshKeychainAccess: true)
+
+        #expect(resolution.credentials?.source == .keychain)
+        #expect(resolution.credentials?.oauth.accessToken == "keychain-token")
+    }
+
+    @Test
+    func resolveCredentialsWithFreshKeychainAccessSurfacesKeychainDenialBeforeFileFallback() throws {
+        let homeDirectory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: homeDirectory) }
+
+        let credentialsURL = homeDirectory.appendingPathComponent(".claude/.credentials.json")
+        try FileManager.default.createDirectory(at: credentialsURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(
+            """
+            {
+              "claudeAiOauth": {
+                "accessToken": "file-token"
+              }
+            }
+            """.utf8
+        ).write(to: credentialsURL)
+
+        let loader = ClaudeCredentialLoader(
+            homeDirectory: homeDirectory,
+            environment: [:],
+            keychainLoadOverride: .failure(.keychainAccessDenied)
+        )
+
+        let resolution = loader.resolveCredentials(refreshKeychainAccess: true)
+
+        #expect(resolution.credentials == nil)
+        #expect(resolution.issue == .keychainAccessDenied)
+    }
+
+    @Test
     func resolveCredentialsFallsBackToEnvironment() throws {
         let homeDirectory = try makeTemporaryDirectory()
         defer { try? FileManager.default.removeItem(at: homeDirectory) }

@@ -3,7 +3,7 @@ import Foundation
 struct CodexProbe: Sendable {
     private static let responseTimeout: Duration = .seconds(15)
 
-    func fetch() async -> ProviderSnapshot {
+    func fetch(trigger: RefreshTrigger = .automatic) async -> ProviderSnapshot {
         do {
             let limits = try await fetchRateLimits()
             return ProviderSnapshot(

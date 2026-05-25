@@ -98,6 +98,64 @@ struct ClaudeProbeTests {
     }
 
     @Test
+    func manualFetchRefreshesKeychainAccessBeforeFileCredentials() async throws {
+        actor State {
+            var usageTokens: [String] = []
+
+            func recordUsageToken(_ token: String) {
+                usageTokens.append(token)
+            }
+        }
+
+        let state = State()
+        let homeDirectory = try makeTemporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: homeDirectory) }
+
+        let credentialsURL = homeDirectory.appendingPathComponent(".claude/.credentials.json")
+        try FileManager.default.createDirectory(at: credentialsURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(
+            """
+            {
+              "claudeAiOauth": {
+                "accessToken": "file-token",
+                "expiresAt": 9999999999999
+              }
+            }
+            """.utf8
+        ).write(to: credentialsURL)
+
+        let keychainCredentials = ClaudeCredentialResult(
+            oauth: ClaudeOAuthCredentials(accessToken: "keychain-token", refreshToken: nil, expiresAt: 9999999999999, subscriptionType: nil),
+            source: .keychain,
+            fullData: [:]
+        )
+        let loader = ClaudeCredentialLoader(
+            homeDirectory: homeDirectory,
+            environment: [:],
+            keychainLoadOverride: .success(keychainCredentials)
+        )
+        let apiClient = ClaudeAPIClient(
+            fetchStatus: { ClaudeAuthStatus(loggedIn: nil) },
+            refreshToken: { credentials, _ in credentials },
+            fetchUsage: { token in
+                await state.recordUsageToken(token)
+                return ClaudeUsageResponse(
+                    fiveHour: ClaudeQuotaData(utilization: 30, resetsAt: "2026-04-06T12:00:00Z"),
+                    sevenDay: ClaudeQuotaData(utilization: 55, resetsAt: "2026-04-12T12:00:00Z")
+                )
+            }
+        )
+
+        _ = await ClaudeProbe(
+            credentialLoader: loader,
+            accountInfoResolver: ClaudeAccountInfoResolver(configURL: homeDirectory.appendingPathComponent(".missing")),
+            apiClient: apiClient
+        ).fetch(trigger: .manual)
+
+        #expect(await state.usageTokens == ["keychain-token"])
+    }
+
+    @Test
     func fetchRetriesAfterAuthenticationFailureForRefreshableCredentials() async throws {
         actor State {
             var usageTokens: [String] = []

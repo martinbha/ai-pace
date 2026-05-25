@@ -15,10 +15,10 @@ struct ClaudeProbe: Sendable {
         self.apiClient = apiClient
     }
 
-    func fetch() async -> ProviderSnapshot {
+    func fetch(trigger: RefreshTrigger = .automatic) async -> ProviderSnapshot {
         do {
             let accountInfo = accountInfoResolver.resolve()
-            let resolution = credentialLoader.resolveCredentials()
+            let resolution = credentialLoader.resolveCredentials(refreshKeychainAccess: trigger == .manual)
 
             guard var credentials = resolution.credentials else {
                 if let issue = resolution.issue {

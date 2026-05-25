@@ -65,7 +65,7 @@ actor ProbeCounter {
 struct ProbeStub: ProviderSnapshotFetching {
     let queue: ProbeQueue
 
-    func fetch() async -> ProviderSnapshot {
+    func fetch(trigger: RefreshTrigger) async -> ProviderSnapshot {
         await queue.next()
     }
 }
@@ -74,7 +74,7 @@ struct CountingProbe: ProviderSnapshotFetching {
     let snapshot: ProviderSnapshot
     let counter: ProbeCounter
 
-    func fetch() async -> ProviderSnapshot {
+    func fetch(trigger: RefreshTrigger) async -> ProviderSnapshot {
         await counter.increment()
         return snapshot
     }
