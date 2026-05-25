@@ -13,7 +13,10 @@ let package = Package(
         .executableTarget(
             name: "AIPace",
             path: "Sources/AIPace",
-            exclude: ["Info.plist"]
+            exclude: ["Info.plist"],
+            linkerSettings: [
+                .linkedFramework("Carbon"),
+            ]
         ),
         .testTarget(
             name: "AIPaceTests",
