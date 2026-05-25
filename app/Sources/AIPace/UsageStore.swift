@@ -8,11 +8,18 @@ protocol ProviderSnapshotFetching: Sendable {
 extension ClaudeProbe: ProviderSnapshotFetching {}
 extension CodexProbe: ProviderSnapshotFetching {}
 
+private struct SnapshotMergeResult {
+    let snapshot: ProviderSnapshot
+    let preservedPrevious: Bool
+    let hasFreshUsageData: Bool
+}
+
 @MainActor
 final class UsageStore: ObservableObject {
     @Published var claude = ProviderSnapshot.loading(.claude)
     @Published var codex = ProviderSnapshot.loading(.codex)
     @Published var lastUpdated: Date?
+    @Published var lastRefreshAttemptedAt: Date?
     @Published var isRefreshing = false
     @Published private(set) var refreshNotificationKeys: Set<String>
     @Published var autoRefreshInterval: AutoRefreshInterval
@@ -93,12 +100,17 @@ final class UsageStore: ObservableObject {
         let resolvedClaude = mergedSnapshot(previous: previousClaude, current: newClaude)
         let resolvedCodex = mergedSnapshot(previous: previousCodex, current: newCodex)
 
-        claude = resolvedClaude
-        codex = resolvedCodex
-        lastUpdated = Date()
+        claude = resolvedClaude.snapshot
+        codex = resolvedCodex.snapshot
 
-        await notifyIfWindowRefreshed(previous: previousClaude, current: resolvedClaude)
-        await notifyIfWindowRefreshed(previous: previousCodex, current: resolvedCodex)
+        let refreshDate = Date()
+        lastRefreshAttemptedAt = refreshDate
+        if resolvedClaude.hasFreshUsageData || resolvedCodex.hasFreshUsageData {
+            lastUpdated = refreshDate
+        }
+
+        await notifyIfWindowRefreshed(previous: previousClaude, current: resolvedClaude.snapshot)
+        await notifyIfWindowRefreshed(previous: previousCodex, current: resolvedCodex.snapshot)
     }
 
     func setAutoRefreshInterval(_ interval: AutoRefreshInterval) {
@@ -262,17 +274,21 @@ final class UsageStore: ObservableObject {
         }
     }
 
-    private func mergedSnapshot(previous: ProviderSnapshot, current: ProviderSnapshot) -> ProviderSnapshot {
+    private func mergedSnapshot(previous: ProviderSnapshot, current: ProviderSnapshot) -> SnapshotMergeResult {
         guard shouldPreservePreviousSnapshot(
             previous: previous,
             current: current,
             preservedFailureCount: preservedFailureCounts[current.provider, default: 0]
         ) else {
             preservedFailureCounts[current.provider] = 0
-            return current
+            return SnapshotMergeResult(snapshot: current, preservedPrevious: false, hasFreshUsageData: hasUsageData(current))
         }
         preservedFailureCounts[current.provider, default: 0] += 1
-        return previous
+        return SnapshotMergeResult(
+            snapshot: snapshotWithCacheDetail(previous: previous, current: current),
+            preservedPrevious: true,
+            hasFreshUsageData: false
+        )
     }
 
     private func shouldPreservePreviousSnapshot(
@@ -280,13 +296,11 @@ final class UsageStore: ObservableObject {
         current: ProviderSnapshot,
         preservedFailureCount: Int
     ) -> Bool {
-        let hasCurrentData = current.fiveHour.usedPercentage != nil || current.weekly.usedPercentage != nil
-        guard !hasCurrentData else {
+        guard !hasUsageData(current) else {
             return false
         }
 
-        let hadPreviousData = previous.fiveHour.usedPercentage != nil || previous.weekly.usedPercentage != nil
-        guard hadPreviousData else {
+        guard hasUsageData(previous) else {
             return false
         }
 
@@ -300,6 +314,24 @@ final class UsageStore: ObservableObject {
         }
 
         return isTransientClaudeAuthFailure(message)
+    }
+
+    private func hasUsageData(_ snapshot: ProviderSnapshot) -> Bool {
+        snapshot.fiveHour.usedPercentage != nil || snapshot.weekly.usedPercentage != nil
+    }
+
+    private func snapshotWithCacheDetail(previous: ProviderSnapshot, current: ProviderSnapshot) -> ProviderSnapshot {
+        var snapshot = previous
+        let message = current.fiveHour.message ?? current.weekly.message ?? "refresh failed"
+        snapshot.detail = cachedDetail(previous.detail, message: message)
+        return snapshot
+    }
+
+    private func cachedDetail(_ detail: String?, message: String) -> String {
+        let existingParts = detail?
+            .components(separatedBy: " · ")
+            .filter { !$0.hasPrefix("Cached:") } ?? []
+        return (existingParts + ["Cached: \(message)"]).joined(separator: " · ")
     }
 
     private func isTransientClaudeAuthFailure(_ message: String) -> Bool {

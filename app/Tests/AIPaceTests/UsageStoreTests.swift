@@ -38,7 +38,7 @@ struct UsageStoreTests {
         let defaults = UserDefaults(suiteName: suiteName)!
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
-        let previousClaude = makeSnapshot(.claude, fiveHourUsed: 20, weeklyUsed: 70)
+        let previousClaude = makeSnapshot(.claude, fiveHourUsed: 20, weeklyUsed: 70, detail: "Plan: Pro")
         let previousCodex = makeSnapshot(.codex, fiveHourUsed: 5, weeklyUsed: 10)
         let claudeQueue = ProbeQueue([
             makeSnapshot(.claude, fiveHourMessage: "HTTP 429 rate limit", weeklyMessage: "HTTP 429 rate limit"),
@@ -60,9 +60,42 @@ struct UsageStoreTests {
 
         #expect(store.claude.fiveHour.usedPercentage == 20)
         #expect(store.claude.weekly.usedPercentage == 70)
+        #expect(store.claude.detail == "Plan: Pro · Cached: HTTP 429 rate limit")
         #expect(store.codex.fiveHour.usedPercentage == 11)
         #expect(store.codex.weekly.usedPercentage == 22)
         #expect(store.lastUpdated != nil)
+        #expect(store.lastRefreshAttemptedAt != nil)
+    }
+
+    @Test
+    @MainActor
+    func refreshDoesNotAdvanceLastUpdatedWhenAllSnapshotsAreCached() async {
+        let suiteName = UUID().uuidString
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let previousDate = Date(timeIntervalSince1970: 1_000)
+        let store = UsageStore(
+            claudeProbe: ProbeStub(queue: ProbeQueue([
+                makeSnapshot(.claude, fiveHourMessage: "HTTP 429 rate limit", weeklyMessage: "HTTP 429 rate limit"),
+            ])),
+            codexProbe: ProbeStub(queue: ProbeQueue([
+                makeSnapshot(.codex, fiveHourMessage: "HTTP 429 rate limit", weeklyMessage: "HTTP 429 rate limit"),
+            ])),
+            notificationManager: NotificationManagerSpy(),
+            userDefaults: defaults,
+            startRefreshLoop: false
+        )
+        store.claude = makeSnapshot(.claude, fiveHourUsed: 20, weeklyUsed: 70)
+        store.codex = makeSnapshot(.codex, fiveHourUsed: 5, weeklyUsed: 10)
+        store.lastUpdated = previousDate
+
+        await store.refresh()
+
+        #expect(store.lastUpdated == previousDate)
+        #expect(store.lastRefreshAttemptedAt != nil)
+        #expect(store.claude.detail == "Cached: HTTP 429 rate limit")
+        #expect(store.codex.detail == "Cached: HTTP 429 rate limit")
     }
 
     @Test
